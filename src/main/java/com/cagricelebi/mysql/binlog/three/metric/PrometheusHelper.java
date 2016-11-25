@@ -15,7 +15,7 @@ public class PrometheusHelper {
 
     private final String schemaName;
 
-    private static final Histogram prometheusHistogram = Histogram.build()
+    private static final Histogram prometheusRecordHistogram = Histogram.build()
             .buckets(100d, 200d, 300d, 400d, 500d, 700d, 1000d, 5000d, 10000d, 50000d, 100000d)
             .name("binlog_records")
             .help("Tracks each binlog event passing though, and shows json event size in bytes.")
@@ -26,42 +26,43 @@ public class PrometheusHelper {
             .help("Picks a binlog event and calculates the difference between event timestamp and server timestamp in milliseconds.")
             .labelNames("schema_name").register();
 
-    private static final Gauge prometheusProcessTimeGauge = Gauge.build()
-            .name("binlog_process_time_milliseconds")
-            .help("Tracks each binlog event passing through, and shows how much time needed to process that single event.")
+    private static final Histogram prometheusProcessTimeHistogram = Histogram.build()
+            .buckets(50d, 100d, 200d, 400d, 600d, 1000d, 10000d, 100000d)
+            .name("binlog_event_process_time_nanoseconds")
+            .help("Tracks each binlog event passing through, and shows how much time needed to process that single event in nanoseconds.")
             .labelNames("schema_name").register();
 
     public PrometheusHelper(String schemaName) {
         this.schemaName = schemaName;
     }
 
-    public void histogramSize(double recSize) {
+    public void histogramSize(double bytes) {
         try {
-            prometheusHistogram.labels(schemaName).observe(recSize);
+            prometheusRecordHistogram.labels(schemaName).observe(bytes);
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
         }
     }
 
-    public void gaugeDelay(long diff) {
+    public void gaugeDelay(long millis) {
         try {
-            prometheusDelayGauge.labels(schemaName).set(diff);
+            prometheusDelayGauge.labels(schemaName).set(millis);
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
         }
     }
 
-    public void gaugeProcessTime(long scripttimer) {
+    public void gaugeProcessTime(long nanos) {
         try {
-            prometheusProcessTimeGauge.labels(schemaName).set(scripttimer);
+            prometheusProcessTimeHistogram.labels(schemaName).observe(nanos);
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
         }
     }
 
     public void shutdown() {
-        prometheusHistogram.clear();
+        prometheusRecordHistogram.clear();
         prometheusDelayGauge.clear();
-        prometheusProcessTimeGauge.clear();
+        prometheusProcessTimeHistogram.clear();
     }
 }

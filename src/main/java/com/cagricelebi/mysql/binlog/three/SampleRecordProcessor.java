@@ -23,7 +23,6 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
     private static final Logger logger = LoggerFactory.getLogger(SampleRecordProcessor.class);
 
     private volatile PrometheusHelper prometheus;
-
     private volatile long METRICS_LAST_TRACE_INFO_DIFF;
 
     public SampleRecordProcessor() {
@@ -33,14 +32,12 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
     @Override
     public void onEvent(Event event) {
         try {
-            long scripttimer = System.currentTimeMillis();
-
             EventHeaderV4 header = ((EventHeaderV4) event.getHeader());
             EventType eventType = header.getEventType();
-
-            METRICS_LAST_TRACE_INFO_DIFF = System.currentTimeMillis() + header.getTimestamp();
+            METRICS_LAST_TRACE_INFO_DIFF = System.currentTimeMillis() - header.getTimestamp();
             prometheus.gaugeDelay(METRICS_LAST_TRACE_INFO_DIFF);
 
+            long scripttimer = System.nanoTime();
             if (eventType == EventType.EXT_WRITE_ROWS || eventType == EventType.WRITE_ROWS) {
                 handleInsert(event);
             } else if (eventType == EventType.EXT_UPDATE_ROWS || eventType == EventType.UPDATE_ROWS) {
@@ -48,8 +45,7 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
             } else if (eventType == EventType.EXT_DELETE_ROWS || eventType == EventType.DELETE_ROWS) {
                 handleDelete(event);
             }
-
-            scripttimer = System.currentTimeMillis() - scripttimer;
+            scripttimer = System.nanoTime() - scripttimer;
             prometheus.gaugeProcessTime(scripttimer);
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
@@ -68,8 +64,9 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
         UpdateRowsEventData data = ((UpdateRowsEventData) event.getData());
         List<Map.Entry<Serializable[], Serializable[]>> rows = data.getRows();
         for (Map.Entry<Serializable[], Serializable[]> entry : rows) {
-            Serializable[] before = entry.getKey();
-            prometheus.histogramSize(before.length);
+            // FIXME maybe need to count before, too?
+            // Serializable[] before = entry.getKey();
+            // prometheus.histogramSize(before.length);
             Serializable[] after = entry.getValue();
             prometheus.histogramSize(after.length);
         }
