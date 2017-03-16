@@ -22,6 +22,10 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
 
     private static final Logger logger = LoggerFactory.getLogger(SampleRecordProcessor.class);
 
+    private static final String NULL_RECORD = "";
+    private static final String COLUMN_SEPARATOR = "\t";
+    private static final String RECORD_SEPARATOR = "\n"; // Not used.
+
     private volatile PrometheusHelper prometheus;
     private volatile long METRICS_LAST_TRACE_INFO_DIFF;
 
@@ -57,6 +61,8 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
         List<Serializable[]> rows = data.getRows();
         for (Serializable[] row : rows) {
             prometheus.histogramSize(row.length);
+            String rowContent = parseRow(row);
+            logger.info("Inserted Row: '{}'.", rowContent);
         }
     }
 
@@ -64,11 +70,15 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
         UpdateRowsEventData data = ((UpdateRowsEventData) event.getData());
         List<Map.Entry<Serializable[], Serializable[]>> rows = data.getRows();
         for (Map.Entry<Serializable[], Serializable[]> entry : rows) {
+            Serializable[] before = entry.getKey();
+            String rowContent = parseRow(before);
+            logger.info("Updated Row Before: '{}'.", rowContent);
             // FIXME maybe need to count before, too?
-            // Serializable[] before = entry.getKey();
-            // prometheus.histogramSize(before.length);
+            // prometheus.histogramSize(before.length); 
             Serializable[] after = entry.getValue();
             prometheus.histogramSize(after.length);
+            rowContent = parseRow(after);
+            logger.info("Updated Row After: '{}'.", rowContent);
         }
     }
 
@@ -77,7 +87,27 @@ public class SampleRecordProcessor implements BinaryLogClient.EventListener {
         List<Serializable[]> rows = data.getRows();
         for (Serializable[] row : rows) {
             prometheus.histogramSize(row.length);
+            String rowContent = parseRow(row);
+            logger.info("Deleted Row: '{}'.", rowContent);
         }
+    }
+
+    private String parseRow(Serializable[] row) {
+        StringBuilder oneLineRow = new StringBuilder();
+        try {
+            for (Serializable columnValue : row) {
+                if (columnValue == null) {
+                    oneLineRow.append(NULL_RECORD).append(COLUMN_SEPARATOR);
+                } else {
+                    oneLineRow.append(columnValue).append(COLUMN_SEPARATOR);
+                }
+            }
+            oneLineRow.delete(oneLineRow.length() - 1, oneLineRow.length()); // removing column separator at the end.
+            // oneLineRow.append(RECORD_SEPARATOR);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        return oneLineRow.toString();
     }
 
 }
